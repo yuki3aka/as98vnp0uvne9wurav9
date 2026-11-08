@@ -1,0 +1,15 @@
+<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Private Text</title><style>body{font:16px system-ui,sans-serif;max-width:850px;margin:35px auto;padding:0 18px;background:#f6f8fb;color:#17212e}main{background:white;border-radius:12px;padding:24px;box-shadow:0 3px 15px #0001}textarea{width:100%;height:55vh;box-sizing:border-box;font:15px/1.6 monospace;padding:12px;border:1px solid #aaa;border-radius:8px}input{padding:10px}button{padding:10px 16px;margin:7px 5px 7px 0;cursor:pointer}#editor{display:none}#status{white-space:pre-wrap;color:#425466}</style></head><body><main><h1>非公開共有テキスト</h1><section id="login"><input type="password" id="password" placeholder="共通パスワード"><button id="loginBtn">ログイン</button></section><section id="editor"><textarea id="content" spellcheck="false"></textarea><br><button id="saveBtn">保存</button><button id="reloadBtn">再読み込み</button><button id="logoutBtn">ログアウト</button><p id="meta"></p></section><p id="status"></p></main><script>
+const API_BASE='https://REPLACE-WITH-YOUR-WORKER.workers.dev';
+let version=0, dirty=false;
+const $=id=>document.getElementById(id);
+async function request(path,options={}){const r=await fetch(API_BASE+path,{credentials:'include',headers:{'Content-Type':'application/json'},...options});let data=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(data.error||`HTTP ${r.status}`),{status:r.status});return data}
+function status(s){$('status').textContent=s}
+async function load(){const d=await request('/api/document');$('content').value=d.content;version=d.version;dirty=false;$('meta').textContent=`バージョン: ${version} / 更新: ${d.updated_at}`;$('login').style.display='none';$('editor').style.display='block';status('読み込みました')}
+$('content').addEventListener('input',()=>{dirty=true});
+$('loginBtn').onclick=async()=>{try{await request('/api/login',{method:'POST',body:JSON.stringify({password:$('password').value})});$('password').value='';await load()}catch(e){status('ログイン失敗: '+e.message)}};
+$('saveBtn').onclick=async()=>{try{const d=await request('/api/document',{method:'PUT',body:JSON.stringify({content:$('content').value,version})});version=d.version;dirty=false;$('meta').textContent=`バージョン: ${version} / 更新: ${d.updated_at}`;status('保存しました')}catch(e){status(e.status===409?'他の利用者が先に保存しました。現在の文章をコピーしてから再読み込みし、変更を統合してください。':'保存失敗: '+e.message)}};
+$('reloadBtn').onclick=async()=>{if(dirty&&!confirm('未保存の変更を破棄しますか？'))return;try{await load()}catch(e){status(e.message)}};
+$('logoutBtn').onclick=async()=>{try{await request('/api/logout',{method:'POST'})}finally{$('editor').style.display='none';$('login').style.display='block';$('content').value='';status('ログアウトしました')}};
+window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+load().catch(()=>status('パスワードを入力してください'));
+</script></body></html>
